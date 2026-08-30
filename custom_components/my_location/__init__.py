@@ -2,8 +2,13 @@
 
 from __future__ import annotations
 
-import aiohttp
+from http import HTTPStatus
+from typing import Any
 
+import aiohttp
+from aiohttp import web
+
+from homeassistant.components import webhook
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
@@ -19,10 +24,13 @@ from homeassistant.helpers.config_entry_oauth2_flow import (
     OAuth2Session,
     async_get_config_entry_implementation,
 )
+from homeassistant.helpers.dispatcher import async_dispatcher_send
 
 from .const import FLEET_API_BASE
 
-PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.BUTTON]
+CONF_BRIDGE_SECRET = "bridge_secret"
+SIGNAL_LOCATION_UPDATE = "my_location_location_update_{}"
+PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.BUTTON, Platform.DEVICE_TRACKER]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -114,10 +122,54 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if entry.title != display_name:
             hass.config_entries.async_update_entry(entry, title=display_name)
 
+    if bridge_secret := entry.options.get(CONF_BRIDGE_SECRET):
+        async def handle_location_webhook(
+            hass: HomeAssistant, webhook_id: str, request: web.Request
+        ) -> web.Response:
+            """Receive a minimal location update from the VPS bridge."""
+            try:
+                data: dict[str, Any] = await request.json()
+                latitude = float(data["latitude"])
+                longitude = float(data["longitude"])
+            except (KeyError, TypeError, ValueError):
+                return web.json_response(
+                    {"error": "invalid location payload"},
+                    status=HTTPStatus.BAD_REQUEST,
+                )
+
+            if not (-90 <= latitude <= 90 and -180 <= longitude <= 180):
+                return web.json_response(
+                    {"error": "invalid coordinates"},
+                    status=HTTPStatus.BAD_REQUEST,
+                )
+
+            async_dispatcher_send(
+                hass,
+                SIGNAL_LOCATION_UPDATE.format(entry.entry_id),
+                {
+                    "latitude": latitude,
+                    "longitude": longitude,
+                    "vin_last_4": data.get("vin_last_4"),
+                    "timestamp": data.get("timestamp"),
+                },
+            )
+            return web.json_response({"ok": True})
+
+        webhook.async_register(
+            hass,
+            "my_location",
+            f"{entry.title} Fleet Telemetry",
+            bridge_secret,
+            handle_location_webhook,
+            local_only=False,
+        )
+
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload MY Location."""
+    if bridge_secret := entry.options.get(CONF_BRIDGE_SECRET):
+        webhook.async_unregister(hass, bridge_secret)
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
