@@ -20,6 +20,12 @@ def forward_location(payload: dict) -> None:
     if payload.get("msg") != "record_payload":
         return
 
+    metadata = payload.get("metadata")
+    if isinstance(metadata, dict):
+        tx_type = metadata.get("txtype")
+        if tx_type:
+            print(f"Received telemetry record type={tx_type}", flush=True)
+
     data = payload.get("data")
     if not isinstance(data, dict):
         return
@@ -51,9 +57,13 @@ def forward_location(payload: dict) -> None:
     try:
         with urllib.request.urlopen(request, timeout=10) as response:
             if response.status >= 300:
-                print(f"Home Assistant returned HTTP {response.status}", file=sys.stderr)
+                print(f"Home Assistant returned HTTP {response.status}", file=sys.stderr, flush=True)
+                return
+            print("Forwarded location to Home Assistant", flush=True)
+    except urllib.error.HTTPError as err:
+        print(f"Home Assistant returned HTTP {err.code}", file=sys.stderr, flush=True)
     except (urllib.error.URLError, TimeoutError) as err:
-        print(f"Unable to forward location: {err}", file=sys.stderr)
+        print(f"Unable to forward location: {err}", file=sys.stderr, flush=True)
 
 
 def main() -> None:
@@ -67,10 +77,12 @@ def main() -> None:
         text = packet.decode("utf-8", errors="replace")
         start = text.find("{")
         if start == -1:
+            print("Received syslog packet without JSON payload", flush=True)
             continue
         try:
             payload = json.loads(text[start:])
         except json.JSONDecodeError:
+            print("Received syslog packet with invalid JSON payload", flush=True)
             continue
         forward_location(payload)
 
