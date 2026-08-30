@@ -1,0 +1,20 @@
+[Unit]
+Description=MY Location Fleet Telemetry Bridge
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=my-location
+Group=my-location
+EnvironmentFile=/etc/my-location-bridge.env
+ExecStart=/usr/bin/python3 /opt/my-location-bridge/bridge.py
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+
+[Install]
+WantedBy=multi-user.target
