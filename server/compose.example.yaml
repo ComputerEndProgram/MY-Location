@@ -1,0 +1,41 @@
+services:
+  fleet-telemetry:
+    image: tesla/fleet-telemetry:latest # Pin a tested digest in production.
+    container_name: fleet-telemetry
+    restart: unless-stopped
+    command:
+      - /fleet-telemetry
+      - -config=/etc/fleet-telemetry/config.json
+    ports:
+      - "4443:4443"
+    volumes:
+      - /etc/fleet-telemetry/config.json:/etc/fleet-telemetry/config.json:ro
+      - /etc/fleet-telemetry/certs:/etc/fleet-telemetry/certs:ro
+    logging:
+      driver: syslog
+      options:
+        syslog-address: "udp://127.0.0.1:5514"
+        syslog-format: "rfc3164"
+        tag: "fleet-telemetry"
+
+  vehicle-command:
+    image: tesla/vehicle-command:latest # Pin a tested digest in production.
+    container_name: vehicle-command
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    command:
+      - -key-file
+      - /config/fleet-key.pem
+      - -tls-key
+      - /config/tls.key
+      - -cert
+      - /config/tls.crt
+      - -host
+      - 0.0.0.0
+      - -port
+      - "4444"
+    ports:
+      - "127.0.0.1:4444:4444"
+    volumes:
+      - /etc/tesla-command:/config:ro
