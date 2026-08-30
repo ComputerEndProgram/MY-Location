@@ -22,7 +22,7 @@ from homeassistant.helpers.config_entry_oauth2_flow import (
 
 from .const import FLEET_API_BASE
 
-PLATFORMS: list[Platform] = [Platform.SENSOR]
+PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.BUTTON]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
