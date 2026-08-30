@@ -1,0 +1,10 @@
+{
+  "domain": "my_location",
+  "name": "MY Location",
+  "codeowners": [],
+  "config_flow": true,
+  "dependencies": ["application_credentials"],
+  "documentation": "https://github.com/ComputerEndProgram/MY-Location",
+  "iot_class": "cloud_push",
+  "version": "0.1.0"
+}
