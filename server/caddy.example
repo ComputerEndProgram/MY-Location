@@ -1,0 +1,28 @@
+# Replace telemetry.example.com, HOME_PUBLIC_IP, and paths as appropriate.
+telemetry.example.com {
+	@telemetry_ca path /.well-known/my-location/telemetry-ca.pem
+	handle @telemetry_ca {
+		root * /var/www/tesla-public
+		rewrite * /telemetry-ca.pem
+		file_server
+	}
+
+	# Narrow route used by Home Assistant to configure Fleet Telemetry.
+	# The general Vehicle Command Proxy remains bound to localhost.
+	@ha_telemetry_config {
+		method POST
+		path /api/1/vehicles/fleet_telemetry_config
+		remote_ip HOME_PUBLIC_IP
+	}
+
+	handle @ha_telemetry_config {
+		reverse_proxy https://127.0.0.1:4444 {
+			transport http {
+				tls_server_name telemetry.example.com
+			}
+			header_up Host telemetry.example.com
+		}
+	}
+
+	respond "MY Location Fleet Telemetry" 200
+}
