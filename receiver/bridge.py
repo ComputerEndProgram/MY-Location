@@ -13,6 +13,7 @@ import urllib.request
 LISTEN_HOST = os.environ.get("MY_LOCATION_LISTEN_HOST", "127.0.0.1")
 LISTEN_PORT = int(os.environ.get("MY_LOCATION_LISTEN_PORT", "5514"))
 WEBHOOK_URL = os.environ["MY_LOCATION_WEBHOOK_URL"]
+USER_AGENT = "MY-Location-Bridge/0.5.1"
 
 
 def forward_location(payload: dict) -> None:
@@ -50,18 +51,32 @@ def forward_location(payload: dict) -> None:
 
     request = urllib.request.Request(
         WEBHOOK_URL,
-        data=json.dumps(body).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
+        data=json.dumps(body, separators=(",", ":")).encode("utf-8"),
+        headers={
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "User-Agent": USER_AGENT,
+        },
         method="POST",
     )
     try:
         with urllib.request.urlopen(request, timeout=10) as response:
             if response.status >= 300:
-                print(f"Home Assistant returned HTTP {response.status}", file=sys.stderr, flush=True)
+                server = response.headers.get("Server", "unknown")
+                print(
+                    f"Home Assistant returned HTTP {response.status} (server={server})",
+                    file=sys.stderr,
+                    flush=True,
+                )
                 return
             print("Forwarded location to Home Assistant", flush=True)
     except urllib.error.HTTPError as err:
-        print(f"Home Assistant returned HTTP {err.code}", file=sys.stderr, flush=True)
+        server = err.headers.get("Server", "unknown") if err.headers else "unknown"
+        print(
+            f"Home Assistant returned HTTP {err.code} (server={server})",
+            file=sys.stderr,
+            flush=True,
+        )
     except (urllib.error.URLError, TimeoutError) as err:
         print(f"Unable to forward location: {err}", file=sys.stderr, flush=True)
 
