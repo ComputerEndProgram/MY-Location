@@ -42,13 +42,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         raise ConfigEntryNotReady("Unable to refresh Tesla OAuth token") from err
 
     websession = async_get_clientsession(hass)
+    headers = {
+        "Authorization": f"Bearer {oauth_session.token['access_token']}",
+        "Accept": "application/json",
+    }
+
     try:
         response = await websession.get(
             f"{FLEET_API_BASE}/api/1/vehicles",
-            headers={
-                "Authorization": f"Bearer {oauth_session.token['access_token']}",
-                "Accept": "application/json",
-            },
+            headers=headers,
         )
         if response.status == 401:
             raise ConfigEntryAuthFailed("Tesla rejected the OAuth token")
@@ -63,9 +65,48 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if not isinstance(vehicles, list):
         raise ConfigEntryNotReady("Unexpected response from Tesla Fleet API")
 
+    vins = [
+        vehicle["vin"]
+        for vehicle in vehicles
+        if isinstance(vehicle, dict) and isinstance(vehicle.get("vin"), str)
+    ]
+
+    fleet_status: dict = {}
+    fleet_status_error: str | None = None
+    if vins:
+        try:
+            await oauth_session.async_ensure_token_valid()
+            status_headers = {
+                "Authorization": f"Bearer {oauth_session.token['access_token']}",
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+            }
+            response = await websession.post(
+                f"{FLEET_API_BASE}/api/1/vehicles/fleet_status",
+                headers=status_headers,
+                json={"vins": vins},
+            )
+            if response.status == 401:
+                raise ConfigEntryAuthFailed("Tesla rejected the OAuth token")
+            if response.status >= 400:
+                fleet_status_error = f"HTTP {response.status}"
+            else:
+                status_payload = await response.json()
+                status_response = status_payload.get("response", {})
+                if isinstance(status_response, dict):
+                    fleet_status = status_response
+                else:
+                    fleet_status_error = "Unexpected response"
+        except ConfigEntryAuthFailed:
+            raise
+        except (aiohttp.ClientError, ValueError, OAuth2TokenRequestError) as err:
+            fleet_status_error = type(err).__name__
+
     entry.runtime_data = {
         "oauth_session": oauth_session,
         "vehicles": vehicles,
+        "fleet_status": fleet_status,
+        "fleet_status_error": fleet_status_error,
     }
 
     if len(vehicles) == 1:
