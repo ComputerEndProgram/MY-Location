@@ -2,13 +2,9 @@
 
 from typing import Any, override
 
-from homeassistant.components.application_credentials import (
-    AuthImplementation,
-    AuthorizationServer,
-    ClientCredential,
-)
+from homeassistant.components.application_credentials import ClientCredential
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import config_entry_oauth2_flow
+from homeassistant.helpers.config_entry_oauth2_flow import LocalOAuth2Implementation
 
 from .const import (
     AUTHORIZE_URL,
@@ -19,8 +15,31 @@ from .const import (
 )
 
 
-class TeslaOAuth2Implementation(AuthImplementation):
+class TeslaOAuth2Implementation(LocalOAuth2Implementation):
     """Tesla-specific OAuth implementation."""
+
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        auth_domain: str,
+        credential: ClientCredential,
+    ) -> None:
+        """Initialize Tesla OAuth."""
+        super().__init__(
+            hass,
+            auth_domain,
+            credential.client_id,
+            credential.client_secret,
+            AUTHORIZE_URL,
+            TOKEN_URL,
+        )
+        self._name = credential.name
+
+    @property
+    @override
+    def name(self) -> str:
+        """Return the application credential name."""
+        return self._name or self.client_id
 
     @property
     @override
@@ -50,19 +69,6 @@ async def async_get_auth_implementation(
     hass: HomeAssistant,
     auth_domain: str,
     credential: ClientCredential,
-) -> config_entry_oauth2_flow.AbstractOAuth2Implementation:
+) -> TeslaOAuth2Implementation:
     """Return the Tesla OAuth implementation."""
-    return TeslaOAuth2Implementation(
-        hass=hass,
-        auth_domain=auth_domain,
-        credential=credential,
-        authorization_server=await async_get_authorization_server(hass),
-    )
-
-
-async def async_get_authorization_server(hass: HomeAssistant) -> AuthorizationServer:
-    """Return Tesla's OAuth authorization server."""
-    return AuthorizationServer(
-        authorize_url=AUTHORIZE_URL,
-        token_url=TOKEN_URL,
-    )
+    return TeslaOAuth2Implementation(hass, auth_domain, credential)
