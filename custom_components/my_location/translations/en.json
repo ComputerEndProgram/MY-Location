@@ -4,5 +4,19 @@
     "abort": {
       "already_configured": "MY Location is already configured."
     }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Fleet Telemetry bridge",
+        "description": "Enter the long random secret used by the VPS bridge to send location updates to Home Assistant.",
+        "data": {
+          "bridge_secret": "Bridge secret"
+        }
+      }
+    },
+    "error": {
+      "bridge_secret_too_short": "Use a secret of at least 32 characters."
+    }
   }
 }
