@@ -1,0 +1,8 @@
+{
+  "title": "MY Location",
+  "config": {
+    "abort": {
+      "already_configured": "MY Location is already configured."
+    }
+  }
+}
