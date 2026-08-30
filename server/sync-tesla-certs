@@ -1,0 +1,48 @@
+#!/bin/bash
+set -euo pipefail
+
+# Adjust this path for the local Caddy certificate storage layout.
+SRC_DIR="/var/lib/caddy/.local/share/caddy/certificates/acme-v02.api.letsencrypt.org-directory/telemetry.example.com"
+SRC_CERT="$SRC_DIR/telemetry.example.com.crt"
+SRC_KEY="$SRC_DIR/telemetry.example.com.key"
+
+FT_DIR="/etc/fleet-telemetry/certs"
+VC_DIR="/etc/tesla-command"
+LOCK="/run/sync-tesla-certs.lock"
+
+exec 9>"$LOCK"
+flock -n 9 || exit 0
+
+test -s "$SRC_CERT"
+test -s "$SRC_KEY"
+
+CERT_PUB="$(openssl x509 -in "$SRC_CERT" -pubkey -noout | openssl pkey -pubin -outform DER 2>/dev/null | sha256sum | awk '{print $1}')"
+KEY_PUB="$(openssl pkey -in "$SRC_KEY" -pubout -outform DER 2>/dev/null | sha256sum | awk '{print $1}')"
+
+if [ "$CERT_PUB" != "$KEY_PUB" ]; then
+    echo "Certificate and private key do not match." >&2
+    exit 1
+fi
+
+NEW_CERT="$(sha256sum "$SRC_CERT" | awk '{print $1}')"
+NEW_KEY="$(sha256sum "$SRC_KEY" | awk '{print $1}')"
+OLD_CERT=""
+OLD_KEY=""
+
+[ -f "$FT_DIR/tls.crt" ] && OLD_CERT="$(sha256sum "$FT_DIR/tls.crt" | awk '{print $1}')"
+[ -f "$FT_DIR/tls.key" ] && OLD_KEY="$(sha256sum "$FT_DIR/tls.key" | awk '{print $1}')"
+
+if [ "$NEW_CERT" = "$OLD_CERT" ] && [ "$NEW_KEY" = "$OLD_KEY" ]; then
+    exit 0
+fi
+
+echo "Tesla TLS certificate changed; synchronizing."
+install -o 65532 -g 65532 -m 644 "$SRC_CERT" "$FT_DIR/tls.crt"
+install -o 65532 -g 65532 -m 600 "$SRC_KEY" "$FT_DIR/tls.key"
+install -o 65532 -g 65532 -m 644 "$SRC_CERT" "$VC_DIR/tls.crt"
+install -o 65532 -g 65532 -m 600 "$SRC_KEY" "$VC_DIR/tls.key"
+
+cd /opt/fleet-telemetry
+docker compose restart fleet-telemetry vehicle-command
+
+echo "Tesla TLS certificates synchronized successfully."
