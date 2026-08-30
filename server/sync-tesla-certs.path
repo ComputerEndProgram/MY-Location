@@ -1,0 +1,9 @@
+[Unit]
+Description=Watch Caddy Tesla certificate for renewal
+
+[Path]
+# Adjust to the local Caddy certificate directory.
+PathChanged=/var/lib/caddy/.local/share/caddy/certificates/acme-v02.api.letsencrypt.org-directory/telemetry.example.com
+
+[Install]
+WantedBy=multi-user.target
