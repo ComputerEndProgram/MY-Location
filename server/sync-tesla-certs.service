@@ -1,0 +1,8 @@
+[Unit]
+Description=Synchronize Tesla Fleet Telemetry TLS certificates
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/sync-tesla-certs
