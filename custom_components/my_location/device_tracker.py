@@ -8,11 +8,13 @@ from homeassistant.components.device_tracker import TrackerEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityStateAttribute
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 
 from . import SIGNAL_LOCATION_UPDATE
+from .const import DOMAIN
 
 
 async def async_setup_entry(
@@ -45,6 +47,12 @@ class MyLocationDeviceTracker(TrackerEntity, RestoreEntity):
         self._attr_latitude = None
         self._attr_longitude = None
         self._last_update = None
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, self._vin)},
+            name=vehicle.get("display_name") or f"Tesla {self._vin[-4:]}",
+            manufacturer="Tesla",
+            model="Vehicle",
+        )
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
