@@ -117,10 +117,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "fleet_status_error": fleet_status_error,
     }
 
-    if len(vehicles) == 1:
-        display_name = vehicles[0].get("display_name") or "MY Location"
-        if entry.title != display_name:
-            hass.config_entries.async_update_entry(entry, title=display_name)
+    # The config entry represents the Tesla Fleet API account/connection, not a
+    # particular vehicle. Keep its title stable even as vehicles are added,
+    # renamed, or removed.
+    if entry.title in {"MY Location", "Tesla Anderl"}:
+        hass.config_entries.async_update_entry(entry, title="Tesla Fleet")
 
     if bridge_secret := entry.options.get(CONF_BRIDGE_SECRET):
         async def handle_location_webhook(
