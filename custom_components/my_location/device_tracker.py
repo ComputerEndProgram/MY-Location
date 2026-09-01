@@ -36,20 +36,24 @@ class MyLocationDeviceTracker(TrackerEntity, RestoreEntity):
 
     _attr_has_entity_name = True
     _attr_name = "Location"
-    _attr_icon = "mdi:car-marker"
+    _attr_icon = "mdi:car-connected"
 
     def __init__(self, entry: ConfigEntry, vehicle: dict[str, Any]) -> None:
         """Initialize the tracker."""
         self._entry = entry
         self._vehicle = vehicle
         self._vin = vehicle["vin"]
+        self._vin_last_4 = self._vin[-4:]
         self._attr_unique_id = f"{self._vin}_location"
+        # Home Assistant uses suggested_object_id when first creating the entity
+        # registry entry. The display name remains simply "Location".
+        self._attr_suggested_object_id = f"tesla_{self._vin_last_4}"
         self._attr_latitude = None
         self._attr_longitude = None
         self._last_update = None
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, self._vin)},
-            name=vehicle.get("display_name") or f"Tesla {self._vin[-4:]}",
+            name=vehicle.get("display_name") or f"Tesla {self._vin_last_4}",
             manufacturer="Tesla",
             model="Vehicle",
         )
@@ -57,7 +61,7 @@ class MyLocationDeviceTracker(TrackerEntity, RestoreEntity):
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return minimal diagnostic attributes."""
-        attrs: dict[str, Any] = {"vin_last_4": self._vin[-4:]}
+        attrs: dict[str, Any] = {"vin_last_4": self._vin_last_4}
         if self._last_update is not None:
             attrs["telemetry_timestamp"] = self._last_update
         return attrs
@@ -82,7 +86,7 @@ class MyLocationDeviceTracker(TrackerEntity, RestoreEntity):
     def _handle_location(self, data: dict[str, Any]) -> None:
         """Apply a Fleet Telemetry location update."""
         vin_last_4 = data.get("vin_last_4")
-        if vin_last_4 and vin_last_4 != self._vin[-4:]:
+        if vin_last_4 and vin_last_4 != self._vin_last_4:
             return
 
         self._attr_latitude = data["latitude"]
