@@ -32,7 +32,7 @@ class OAuth2FlowHandler(
 
     async def async_oauth_create_entry(self, data: dict):
         """Create the config entry after successful OAuth."""
-        return self.async_create_entry(title="MY Location", data=data)
+        return self.async_create_entry(title="Tesla Fleet", data=data)
 
     @staticmethod
     @callback
