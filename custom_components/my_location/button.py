@@ -12,7 +12,10 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError, OAuth2TokenRequestError
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+
+from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -59,6 +62,12 @@ class MyLocationConfigureTelemetryButton(ButtonEntity):
             or self._vin
         )
         self._attr_unique_id = f"{identifier}_configure_telemetry"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, self._vin)},
+            name=vehicle.get("display_name") or f"Tesla {self._vin[-4:]}",
+            manufacturer="Tesla",
+            model="Vehicle",
+        )
 
     async def async_press(self) -> None:
         """Push the minimal Fleet Telemetry configuration through the command proxy."""
