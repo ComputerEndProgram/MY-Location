@@ -8,7 +8,10 @@ from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+
+from .const import DOMAIN
 
 
 async def async_setup_entry(
@@ -33,12 +36,16 @@ class MyLocationVehicleSensor(SensorEntity):
     _attr_has_entity_name = True
     _attr_name = "Fleet API vehicle"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_enabled_default = False
     _attr_icon = "mdi:car-connected"
 
     def __init__(self, entry: ConfigEntry, vehicle: dict[str, Any]) -> None:
         """Initialize the vehicle sensor."""
         self._vehicle = vehicle
+        vin = vehicle.get("vin")
         self._attr_unique_id = f"{_vehicle_identifier(entry, vehicle)}_fleet_api_vehicle"
+        if isinstance(vin, str):
+            self._attr_device_info = _device_info(vehicle, vin)
 
     @property
     def native_value(self) -> str:
@@ -63,13 +70,17 @@ class MyLocationVirtualKeySensor(SensorEntity):
     _attr_has_entity_name = True
     _attr_name = "Virtual key"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_enabled_default = False
     _attr_icon = "mdi:key-wireless"
 
     def __init__(self, entry: ConfigEntry, vehicle: dict[str, Any]) -> None:
         """Initialize the virtual-key sensor."""
         self._entry = entry
         self._vehicle = vehicle
+        vin = vehicle.get("vin")
         self._attr_unique_id = f"{_vehicle_identifier(entry, vehicle)}_virtual_key"
+        if isinstance(vin, str):
+            self._attr_device_info = _device_info(vehicle, vin)
 
     @property
     def native_value(self) -> str:
@@ -114,6 +125,16 @@ class MyLocationVirtualKeySensor(SensorEntity):
             attributes["fleet_status_error"] = error
 
         return attributes
+
+
+def _device_info(vehicle: dict[str, Any], vin: str) -> DeviceInfo:
+    """Return Home Assistant device information for a Tesla vehicle."""
+    return DeviceInfo(
+        identifiers={(DOMAIN, vin)},
+        name=vehicle.get("display_name") or f"Tesla {vin[-4:]}",
+        manufacturer="Tesla",
+        model="Vehicle",
+    )
 
 
 def _vehicle_identifier(entry: ConfigEntry, vehicle: dict[str, Any]) -> str:
