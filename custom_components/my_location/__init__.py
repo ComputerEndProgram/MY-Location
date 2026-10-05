@@ -19,12 +19,9 @@ from homeassistant.exceptions import (
     ConfigEntryAuthFailed,
     ConfigEntryNotReady,
     OAuth2TokenRequestError,
-    OAuth2TokenReauthError,
+    OAuth2TokenRequestReauthError,
 )
-from homeassistant.helpers.aiohttp_client import (
-    async_create_clientsession,
-    async_get_clientsession,
-)
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.config_entry_oauth2_flow import (
     ImplementationUnavailableError,
     OAuth2Session,
@@ -82,10 +79,14 @@ async def async_create_telemetry_session(
     except (OSError, ValueError, ssl.SSLError) as err:
         return None, f"unable to load the client certificate ({err})"
 
-    # Passing the SSL context as the second positional argument: it becomes the
-    # connector's ssl= argument. auto_cleanup closes this with Home Assistant,
-    # but we still close it on unload so a reload does not leak a connector.
-    return async_create_clientsession(hass, ssl_context), None
+    # Deliberately not async_create_clientsession(): its verify_ssl parameter is
+    # a bool that selects between two Home Assistant built contexts, and an
+    # SSLContext passed there is silently discarded rather than used. HA's ssl
+    # helpers have no client-certificate support, so build the session here.
+    # This runs inside the event loop, which TCPConnector requires, and
+    # async_unload_entry closes the session.
+    connector = aiohttp.TCPConnector(ssl=ssl_context)
+    return aiohttp.ClientSession(connector=connector), None
 
 
 async def async_reload_config_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
