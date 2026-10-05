@@ -1,5 +1,12 @@
 DOMAIN = "my_location"
 
+CONF_BRIDGE_SECRET = "bridge_secret"
+CONF_CLIENT_CERT = "client_cert"
+CONF_CLIENT_KEY = "client_key"
+
+DEFAULT_CLIENT_CERT = "/config/ssl/my_location/client.crt"
+DEFAULT_CLIENT_KEY = "/config/ssl/my_location/client.key"
+
 AUTHORIZE_URL = "https://auth.tesla.com/oauth2/v3/authorize"
 TOKEN_URL = "https://fleet-auth.prd.vn.cloud.tesla.com/oauth2/v3/token"
 FLEET_API_BASE = "https://fleet-api.prd.eu.vn.cloud.tesla.com"

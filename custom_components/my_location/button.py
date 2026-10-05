@@ -78,7 +78,16 @@ class MyLocationConfigureTelemetryButton(ButtonEntity):
         except (aiohttp.ClientError, OAuth2TokenRequestError) as err:
             raise HomeAssistantError("Unable to refresh Tesla OAuth token") from err
 
-        websession = async_get_clientsession(self.hass)
+        if error := self._entry.runtime_data.get("telemetry_client_auth_error"):
+            raise HomeAssistantError(
+                f"Fleet Telemetry client authentication is unavailable: {error}"
+            )
+
+        # Both requests below target tesla.lcars.qzz.io, so both must go through
+        # the client-authenticated session whenever one is configured.
+        websession = self._entry.runtime_data.get("telemetry_session") or (
+            async_get_clientsession(self.hass)
+        )
 
         try:
             ca_response = await websession.get(TELEMETRY_CA_URL)

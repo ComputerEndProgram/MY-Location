@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import logging
+import os
+import ssl
 from http import HTTPStatus
 from typing import Any
 
@@ -16,9 +19,12 @@ from homeassistant.exceptions import (
     ConfigEntryAuthFailed,
     ConfigEntryNotReady,
     OAuth2TokenRequestError,
-    OAuth2TokenRequestReauthError,
+    OAuth2TokenReauthError,
 )
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.aiohttp_client import (
+    async_create_clientsession,
+    async_get_clientsession,
+)
 from homeassistant.helpers.config_entry_oauth2_flow import (
     ImplementationUnavailableError,
     OAuth2Session,
@@ -26,11 +32,65 @@ from homeassistant.helpers.config_entry_oauth2_flow import (
 )
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 
-from .const import FLEET_API_BASE
+from .const import CONF_BRIDGE_SECRET, CONF_CLIENT_CERT, CONF_CLIENT_KEY, FLEET_API_BASE
 
-CONF_BRIDGE_SECRET = "bridge_secret"
+_LOGGER = logging.getLogger(__name__)
+
 SIGNAL_LOCATION_UPDATE = "my_location_location_update_{}"
 PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.BUTTON, Platform.DEVICE_TRACKER]
+
+
+def _build_client_ssl_context(cert_path: str, key_path: str) -> ssl.SSLContext:
+    """Build a TLS context that presents the MY Location client certificate.
+
+    The server certificate is still verified against the default trust store,
+    so tesla.lcars.qzz.io keeps validating via its public Let's Encrypt chain.
+    The custom CA is only needed by the server to verify us, never by us.
+    """
+    context = ssl.create_default_context()
+    context.load_cert_chain(cert_path, key_path)
+    return context
+
+
+async def async_create_telemetry_session(
+    hass: HomeAssistant, entry: ConfigEntry
+) -> tuple[aiohttp.ClientSession | None, str | None]:
+    """Create the client-authenticated session used to reach tesla.lcars.qzz.io.
+
+    Returns the session, or None when client authentication is not configured
+    and the shared Home Assistant session should be used instead. The second
+    element is a human-readable reason when client authentication was
+    requested but could not be prepared.
+    """
+    cert_path = (entry.options.get(CONF_CLIENT_CERT) or "").strip()
+    key_path = (entry.options.get(CONF_CLIENT_KEY) or "").strip()
+
+    if not cert_path and not key_path:
+        return None, None
+
+    if not cert_path or not key_path:
+        return None, "a client certificate and a client key must both be set"
+
+    for path in (cert_path, key_path):
+        if not await hass.async_add_executor_job(os.path.isfile, path):
+            return None, f"file not found: {path}"
+
+    try:
+        ssl_context = await hass.async_add_executor_job(
+            _build_client_ssl_context, cert_path, key_path
+        )
+    except (OSError, ValueError, ssl.SSLError) as err:
+        return None, f"unable to load the client certificate ({err})"
+
+    # Passing the SSL context as the second positional argument: it becomes the
+    # connector's ssl= argument. auto_cleanup closes this with Home Assistant,
+    # but we still close it on unload so a reload does not leak a connector.
+    return async_create_clientsession(hass, ssl_context), None
+
+
+async def async_reload_config_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Reload the config entry so option changes take effect."""
+    await hass.config_entries.async_reload(entry.entry_id)
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -110,11 +170,22 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         except (aiohttp.ClientError, ValueError, OAuth2TokenRequestError) as err:
             fleet_status_error = type(err).__name__
 
+    telemetry_session, telemetry_client_auth_error = (
+        await async_create_telemetry_session(hass, entry)
+    )
+    if telemetry_client_auth_error:
+        _LOGGER.warning(
+            "Fleet Telemetry client authentication is unavailable: %s",
+            telemetry_client_auth_error,
+        )
+
     entry.runtime_data = {
         "oauth_session": oauth_session,
         "vehicles": vehicles,
         "fleet_status": fleet_status,
         "fleet_status_error": fleet_status_error,
+        "telemetry_session": telemetry_session,
+        "telemetry_client_auth_error": telemetry_client_auth_error,
     }
 
     # The config entry represents the Tesla Fleet API account/connection, not a
@@ -165,6 +236,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         )
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+    # Registered last on purpose: the title migration above also calls
+    # async_update_entry, and an earlier listener would turn that one-time
+    # title change into an unnecessary reload of the whole entry.
+    entry.async_on_unload(entry.add_update_listener(async_reload_config_entry))
     return True
 
 
@@ -172,4 +248,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload MY Location."""
     if bridge_secret := entry.options.get(CONF_BRIDGE_SECRET):
         webhook.async_unregister(hass, bridge_secret)
+    if isinstance(entry.runtime_data, dict):
+        if (session := entry.runtime_data.get("telemetry_session")) is not None:
+            await session.close()
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)

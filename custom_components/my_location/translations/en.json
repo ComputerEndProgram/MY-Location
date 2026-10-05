@@ -9,14 +9,19 @@
     "step": {
       "init": {
         "title": "Fleet Telemetry bridge",
-        "description": "Enter the long random secret used by the VPS bridge to send location updates to Home Assistant.",
+        "description": "Enter the long random secret used by the VPS bridge to send location updates to Home Assistant. Optionally set the client certificate and key used for mutual TLS to tesla.lcars.qzz.io. Clear both fields to disable client authentication.",
         "data": {
-          "bridge_secret": "Bridge secret"
+          "bridge_secret": "Bridge secret",
+          "client_cert": "Client certificate",
+          "client_key": "Client key"
         }
       }
     },
     "error": {
-      "bridge_secret_too_short": "Use a secret of at least 32 characters."
+      "bridge_secret_too_short": "Use a secret of at least 32 characters.",
+      "client_cert_pair_required": "Set both the client certificate and the client key, or clear both.",
+      "client_cert": "The client certificate file was not found.",
+      "client_key": "The client key file was not found."
     }
   }
 }
